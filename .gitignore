@@ -1,0 +1,79 @@
+# =========================
+# Visual Studio / Rider / IDE files
+# =========================
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.idea/
+*.dotSettings.user
+
+# =========================
+# Build outputs
+# =========================
+bin/
+obj/
+out/
+Debug/
+Release/
+
+# =========================
+# NuGet
+# =========================
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# =========================
+# Rider
+# =========================
+.idea/
+
+# =========================
+# ASP.NET / .NET Core
+# =========================
+appsettings.*.json
+*.db
+*.mdf
+*.ldf
+appsettings.json
+# =========================
+# Environment files
+# =========================
+#.env
+#.env.local
+#.env.*.local
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# EF Core Migrations
+# =========================
+Migrations/
+**/Migrations/
+
+# =========================
+# User-specific files
+# =========================
+*.suo
+*.user
+*.userprefs
+
+# =========================
+# Publish / deployment
+# =========================
+.publish/
+wwwroot/
+
+# =========================
+# Misc
+# =========================
+.vscode/
+.DS_Store
+Thumbs.db
