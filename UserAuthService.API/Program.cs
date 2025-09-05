@@ -6,24 +6,29 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using UserAuthService.API.Config;
+using UserAuthService.Domain.Config;
 using UserAuthService.Application.Interfaces;
 using UserAuthService.Application.Services;
 using UserAuthService.Infrastructure.Data;
 using UserAuthService.Infrastructure.Repositories;
 using UserAuthService.Infrastructure.Services;
 using UserAuthService.Infrastructure.Config;
+using UserAuthService.API.Mapping;
 
 
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
+builder.Services.AddAutoMapper(typeof(AuthMappingProfile));
+
 
 // --------------------
 // Secrets from appsettings.json
 // --------------------
 var jwtOptions = configuration.GetSection("JwtOptions").Get<JwtOptions>()
                  ?? throw new Exception("JwtOptions section missing");
+if (string.IsNullOrEmpty(jwtOptions.SecretKey))
+    throw new Exception("JWT Secret is missing");
 
 // --------------------
 // Database
@@ -38,11 +43,11 @@ builder.Services.AddDbContext<AuthDbContext>(options =>
 // --------------------
 // JWT Authentication
 // --------------------
-var key = Encoding.ASCII.GetBytes(jwtOptions.Secret);
+var key = Encoding.ASCII.GetBytes(jwtOptions.SecretKey);
 
 builder.Services.Configure<JwtOptions>(options =>
 {
-    options.Secret = jwtOptions.Secret;
+    options.SecretKey = jwtOptions.SecretKey;
     options.Issuer = jwtOptions.Issuer ?? "MyAuthService";
     options.Audience = jwtOptions.Audience ?? "MyClientApp";
     options.AccessTokenExpiryMinutes = jwtOptions.AccessTokenExpiryMinutes > 0 ? jwtOptions.AccessTokenExpiryMinutes : 15;
@@ -72,11 +77,11 @@ builder.Services.AddAuthentication(options =>
 // --------------------
 // SendGrid Email Service
 // --------------------
-var sendGridOptions = configuration.GetSection("Email").Get<SendGridOptions>()
-                     ?? throw new Exception("Email section missing");
+//var sendGridOptions = configuration.GetSection("Email").Get<SendGridOptions>()
+//                     ?? throw new Exception("Email section missing");
 
-builder.Services.AddSingleton(sendGridOptions);
-builder.Services.AddScoped<IEmailService, SendGridEmailService>();
+//builder.Services.AddSingleton(sendGridOptions);
+builder.Services.AddScoped<IEmailService, MockEmailService>();
 
 // --------------------
 // Dependency Injection

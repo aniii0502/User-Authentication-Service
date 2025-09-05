@@ -1,5 +1,8 @@
-public class ResetPasswordDto
+namespace UserAuthService.Application.DTOs
 {
-    public required string Token { get; set; } = string.Empty;
-    public required string NewPassword { get; set; } = string.Empty;
+    public class ResetPasswordDto
+    {
+        public required string Token { get; set; } 
+        public required string NewPassword { get; set; } 
+    }
 }

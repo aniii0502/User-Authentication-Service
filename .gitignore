@@ -8,7 +8,8 @@
 *.sln.docstates
 .idea/
 *.dotSettings.user
-
+*.csproj
+*.http
 # =========================
 # Build outputs
 # =========================
@@ -17,6 +18,9 @@ obj/
 out/
 Debug/
 Release/
+Properties/
+*json
+
 
 # =========================
 # NuGet
@@ -34,11 +38,9 @@ packages/
 # =========================
 # ASP.NET / .NET Core
 # =========================
-appsettings.*.json
-*.db
+#*.db
 *.mdf
 *.ldf
-appsettings.json
 # =========================
 # Environment files
 # =========================
@@ -69,7 +71,8 @@ Migrations/
 # Publish / deployment
 # =========================
 .publish/
-wwwroot/
+
+
 
 # =========================
 # Misc

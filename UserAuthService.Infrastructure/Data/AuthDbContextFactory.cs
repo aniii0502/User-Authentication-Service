@@ -9,8 +9,8 @@ namespace UserAuthService.Infrastructure.Data
         {
             var optionsBuilder = new DbContextOptionsBuilder<AuthDbContext>();
 
-            // Load PostgreSQL connection string from environment variable or hardcode for design-time
-            var connectionString = "Host=localhost;Port=5432;Database=UserAuthDb;Username=akkum;Password=YourStrongPassword";
+
+            var connectionString = "Host=localhost;Port=5432;Database=UserAuthDb;Username=AuthDb;Password=AuthDb";
 
             optionsBuilder.UseNpgsql(connectionString);
 

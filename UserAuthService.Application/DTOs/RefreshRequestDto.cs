@@ -1,4 +1,7 @@
-public class RefreshRequestDto
+namespace UserAuthService.Application.DTOs
 {
-    public required string RefreshToken { get; set; } = string.Empty;
+    public class RefreshRequestDto
+    {
+        public required string RefreshToken { get; set; } 
+    }
 }

@@ -8,8 +8,9 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using UserAuthService.Application.Interfaces;
+using UserAuthService.Application.DTOs;
 using UserAuthService.Domain.Entities;
-using UserAuthService.Application.Config;
+using UserAuthService.Domain.Config;
 using Microsoft.Extensions.Options;
 
 namespace UserAuthService.Application.Services
@@ -22,9 +23,6 @@ namespace UserAuthService.Application.Services
         private readonly PasswordHasher<User> _passwordHasher;
         private readonly JwtOptions _jwtOptions;
         private readonly IEmailService _emailService;
-
-        private const int MAX_FAILED_ATTEMPTS = 5;
-        private const int LOCKOUT_DURATION_MINUTES = 15;
 
         public AuthService(
             IUserRepository userRepo,
@@ -41,61 +39,43 @@ namespace UserAuthService.Application.Services
             _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
         }
 
-        // -------------------
-        // Register
-        // -------------------
-        public async Task<User> RegisterAsync(string fullName, string email, string password)
+        public async Task<UserResponseDto> RegisterAsync(UserRegisterDto dto)
         {
-            var existing = await _userRepo.GetByEmailAsync(email);
+            var existing = await _userRepo.GetByEmailAsync(dto.Email);
             if (existing != null) throw new Exception("Email already exists");
 
-            // ✅ Validate password
-            ValidatePassword(password);
+            ValidatePassword(dto.Password);
 
             var user = new User
             {
-                FullName = fullName,
-                Email = email,
-                Role = "User",
-                FailedLoginAttempts = 0,
-                LockoutEnd = null
+                FullName = dto.FullName,
+                Email = dto.Email
             };
 
-            user.PasswordHash = _passwordHasher.HashPassword(user, password);
+            user.PasswordHash = _passwordHasher.HashPassword(user, dto.Password);
             await _userRepo.AddAsync(user);
-            return user;
+
+            var token =  await GenerateJwtToken(user);
+
+            return new UserResponseDto
+            {
+                Id = user.Id.ToString(),
+                Email = user.Email,
+                FullName = user.FullName,
+                Token = token
+            };
         }
 
-        // -------------------
-        // Login
-        // -------------------
-        public async Task<(string AccessToken, string RefreshToken)> LoginAsync(string email, string password)
+        public async Task<UserResponseDto> LoginAsync(UserLoginDto dto)
         {
-            var user = await _userRepo.GetByEmailAsync(email);
+            var user = await _userRepo.GetByEmailAsync(dto.Email);
             if (user == null) throw new Exception("Invalid credentials");
 
-            // Check lockout
-            if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.UtcNow)
-                throw new Exception($"Account is locked until {user.LockoutEnd.Value}");
-
-            var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+            var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, dto.Password);
             if (result == PasswordVerificationResult.Failed)
-            {
-                user.FailedLoginAttempts++;
-                if (user.FailedLoginAttempts >= MAX_FAILED_ATTEMPTS)
-                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(LOCKOUT_DURATION_MINUTES);
-
-                await _userRepo.UpdateAsync(user);
                 throw new Exception("Invalid credentials");
-            }
 
-            // Reset failed attempts after successful login
-            user.FailedLoginAttempts = 0;
-            user.LockoutEnd = null;
-            await _userRepo.UpdateAsync(user);
-
-            // Generate tokens
-            var accessToken = GenerateJwtToken(user);
+            var accessToken =await GenerateJwtToken(user);
             var refreshToken = new RefreshToken
             {
                 Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
@@ -105,30 +85,16 @@ namespace UserAuthService.Application.Services
             };
             await _refreshRepo.AddAsync(refreshToken);
 
-            return (accessToken, refreshToken.Token);
+            return new UserResponseDto
+            {
+                Id = user.Id.ToString(),
+                Email = user.Email,
+                FullName = user.FullName,
+                Token = accessToken
+            };
         }
 
-        // -------------------
-        // Password validation
-        // -------------------
-        private void ValidatePassword(string password)
-        {
-            if (password.Length < 8)
-                throw new Exception("Password must be at least 8 characters.");
-            if (!password.Any(char.IsUpper))
-                throw new Exception("Password must contain at least one uppercase letter.");
-            if (!password.Any(char.IsLower))
-                throw new Exception("Password must contain at least one lowercase letter.");
-            if (!password.Any(char.IsDigit))
-                throw new Exception("Password must contain at least one number.");
-            if (!password.Any(ch => !char.IsLetterOrDigit(ch)))
-                throw new Exception("Password must contain at least one special character.");
-        }
-
-        // -------------------
-        // Refresh token
-        // -------------------
-        public async Task<string> RefreshTokenAsync(string oldRefreshToken)
+        public async Task<TokenResponseDto> RefreshTokenAsync(string oldRefreshToken)
         {
             var existing = await _refreshRepo.GetByTokenAsync(oldRefreshToken);
             if (existing == null || existing.ExpiresAt < DateTime.UtcNow || existing.IsRevoked)
@@ -137,11 +103,9 @@ namespace UserAuthService.Application.Services
             var user = await _userRepo.GetByIdAsync(existing.UserId);
             if (user == null) throw new Exception("User not found");
 
-            // Revoke old token
             existing.IsRevoked = true;
             await _refreshRepo.UpdateAsync(existing);
 
-            // Create new refresh token
             var refreshToken = new RefreshToken
             {
                 Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
@@ -151,12 +115,13 @@ namespace UserAuthService.Application.Services
             };
             await _refreshRepo.AddAsync(refreshToken);
 
-            return GenerateJwtToken(user);
+            return new TokenResponseDto
+            {
+                AccessToken =await GenerateJwtToken(user),
+                RefreshToken = refreshToken.Token
+            };
         }
 
-        // -------------------
-        // Forgot password
-        // -------------------
         public async Task ForgotPasswordAsync(string email)
         {
             var user = await _userRepo.GetByEmailAsync(email);
@@ -170,16 +135,12 @@ namespace UserAuthService.Application.Services
                 ExpiresAt = DateTime.UtcNow.AddHours(1),
                 IsUsed = false
             };
-
             await _passwordResetRepo.AddAsync(resetToken);
 
             var resetLink = $"https://your-frontend.com/reset-password?token={token}&email={email}";
             await _emailService.SendResetLinkAsync(email, resetLink);
         }
 
-        // -------------------
-        // Reset password
-        // -------------------
         public async Task ResetPasswordAsync(string token, string newPassword)
         {
             var reset = await _passwordResetRepo.GetByTokenAsync(token);
@@ -189,9 +150,7 @@ namespace UserAuthService.Application.Services
             var user = await _userRepo.GetByIdAsync(reset.UserId);
             if (user == null) throw new Exception("User not found");
 
-            // ✅ Validate password before hashing
             ValidatePassword(newPassword);
-
             user.PasswordHash = _passwordHasher.HashPassword(user, newPassword);
             await _userRepo.UpdateAsync(user);
 
@@ -199,28 +158,43 @@ namespace UserAuthService.Application.Services
             await _passwordResetRepo.UpdateAsync(reset);
         }
 
-        // -------------------
-        // Get current user
-        // -------------------
-        public async Task<User> GetCurrentUserAsync(Guid userId)
+        public async Task<UserResponseDto> GetCurrentUserAsync(Guid userId)
         {
-            return await _userRepo.GetByIdAsync(userId);
+            var user = await _userRepo.GetByIdAsync(userId);
+            if (user == null) return null!;
+            return new UserResponseDto
+            {
+                Id = user.Id.ToString(),
+                Email = user.Email,
+                FullName = user.FullName
+            };
         }
 
-        // -------------------
-        // Helper: generate JWT
-        // -------------------
-        private string GenerateJwtToken(User user)
+        private void ValidatePassword(string password)
+        {
+            if (string.IsNullOrEmpty(password) || password.Length < 8)
+                throw new Exception("Password must be at least 8 characters.");
+            if (!password.Any(char.IsUpper))
+                throw new Exception("Password must contain at least one uppercase letter.");
+            if (!password.Any(char.IsLower))
+                throw new Exception("Password must contain at least one lowercase letter.");
+            if (!password.Any(char.IsDigit))
+                throw new Exception("Password must contain at least one number.");
+            if (!password.Any(ch => !char.IsLetterOrDigit(ch)))
+                throw new Exception("Password must contain at least one special character.");
+        }
+
+        public Task<string> GenerateJwtToken(User user)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_jwtOptions.Secret);
+            var key = Encoding.ASCII.GetBytes(_jwtOptions.SecretKey);
 
             var claims = new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-                new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim("role", user.Role)
-            };
+        new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+        new Claim(JwtRegisteredClaimNames.Email, user.Email),
+        new Claim("role", user.Role)
+    };
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -232,7 +206,8 @@ namespace UserAuthService.Application.Services
             };
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
-            return tokenHandler.WriteToken(token);
+            return Task.FromResult(tokenHandler.WriteToken(token));
         }
+
     }
 }

@@ -1,4 +1,7 @@
-public class LogoutRequestDto
+namespace UserAuthService.Application.DTOs
 {
-    public string RefreshToken { get; set; }
+    public class LogoutRequestDto
+    {
+        public required string RefreshToken { get; set; }
+    }
 }

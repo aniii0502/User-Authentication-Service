@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 
-using UserAuthService.Application.Config;
+using UserAuthService.Domain.Config;
 namespace UserAuthService.Application.Services
 {
     public class TokenService
@@ -12,7 +12,7 @@ namespace UserAuthService.Application.Services
             _jwtOptions = jwtOptions.Value;
         }
 
-        public string GetSecret() => _jwtOptions.Secret;
+        public string GetSecret() => _jwtOptions.SecretKey;
 
         public int GetExpiryMinutes() => _jwtOptions.AccessTokenExpiryMinutes;
         public int GetRefreshTokenDays() => _jwtOptions.RefreshTokenExpiryDays;
